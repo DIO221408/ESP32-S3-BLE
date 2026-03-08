@@ -1,0 +1,35 @@
+# This file was generated using idf.py save-defconfig. It can be edited manually.
+# Espressif IoT Development Framework (ESP-IDF) Project Minimal Configuration
+#
+CONFIG_IDF_TARGET="esp32s3"
+
+# ========== 蓝牙配置 ==========
+CONFIG_BT_ENABLED=y
+# CONFIG_BT_BLE_50_FEATURES_SUPPORTED is not set
+CONFIG_BT_BLE_42_FEATURES_SUPPORTED=y
+
+# ========== WiFi配置 ==========
+CONFIG_ESP32_WIFI_ENABLED=y
+CONFIG_ESP32_WIFI_STATIC_RX_BUFFER_NUM=10
+CONFIG_ESP32_WIFI_DYNAMIC_RX_BUFFER_NUM=32
+CONFIG_ESP32_WIFI_DYNAMIC_TX_BUFFER_NUM=32
+CONFIG_ESP32_WIFI_AMPDU_TX_ENABLED=y
+CONFIG_ESP32_WIFI_AMPDU_RX_ENABLED=y
+
+# ========== BLE和WiFi共存配置（关键！）==========
+# 参考文档: https://docs.espressif.com/projects/esp-idf/zh_CN/latest/esp32s3/api-guides/coexist.html
+CONFIG_ESP_COEX_SW_COEXIST_ENABLE=y
+CONFIG_ESP_WIFI_SW_COEXIST_PREFERENCE_BALANCE=y
+
+# ========== 网络协议栈配置 ==========
+CONFIG_LWIP_IPV4=y
+CONFIG_LWIP_IPV6=y
+
+# ========== 事件循环配置 ==========
+CONFIG_ESP_EVENT_LOOP_PROFILING=n
+
+# ========== 分区表配置 ==========
+# 使用自定义分区表以支持更大的固件（BLE+WiFi需要更多空间）
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+CONFIG_PARTITION_TABLE_FILENAME="partitions.csv"
