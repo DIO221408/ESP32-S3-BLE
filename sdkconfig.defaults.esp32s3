@@ -24,6 +24,7 @@ CONFIG_ESP_WIFI_SW_COEXIST_PREFERENCE_BALANCE=y
 # ========== 网络协议栈配置 ==========
 CONFIG_LWIP_IPV4=y
 CONFIG_LWIP_IPV6=y
+CONFIG_LWIP_SNTP=y
 
 # ========== 事件循环配置 ==========
 CONFIG_ESP_EVENT_LOOP_PROFILING=n
