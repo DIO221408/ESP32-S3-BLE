@@ -1,156 +1,128 @@
-# 景区智能导览系统（设备端）
+# 景区智能导览系统设备端固件
 
-基于 ESP32 的 BLE 信标固件，面向景区导览场景。当前版本实现了 **BLE 广播 + WiFi 连接 + BLE/WiFi 共存优化**，用于在景点侧提供位置识别与后续联网扩展能力。
+基于 ESP32 的景区导览设备端固件，负责 BLE 广播、WiFi 回传、MQTT 通信以及环境传感器采集。
 
----
+当前主目标芯片为 `esp32s3`，同时保留 `esp32c3`、`esp32c2` 的配置文件。
 
-## 1. 项目定位
+## 功能概览
 
-本项目用于部署在景区各景点的设备端节点，核心职责是：
+- BLE Beacon 广播，供游客端 App 识别设备与位置
+- WiFi Station 连接景区网络，并带有断线重连与状态恢复逻辑
+- MQTT 上下行通信，按设备 MAC 生成独立主题
+- DHT11 温湿度采集
+- INMP411 麦克风噪声采集
+- WS2812 状态灯反馈 WiFi / MQTT 状态
+- BLE 与 WiFi 共存参数调优
 
-- 持续发出 BLE 广播，供游客手机 App 扫描识别位置
-- 连接 WiFi 网络，为后续云端通信/状态上报预留能力
-- 通过共存参数优化 BLE 与 WiFi 同时工作时的稳定性
-
----
-
-## 2. 当前已实现功能
-
-### BLE 侧
-- 设备名：`Bluedroid_Beacon`
-- 广播类型：`ADV_SCAN_IND`
-- 广播间隔：`100ms`（已从示例常见的 20ms 调整为 100ms，降低与 WiFi 冲突）
-- 扫描响应包含：
-  - 本机 BLE 地址
-  - URI 字段（当前为 `https://espressif.com`）
-
-### WiFi 侧
-- Station 模式连接指定 AP
-- 断线自动重连（最大重试次数：5）
-- 获取 IP 后输出日志
-
-### 共存优化
-- 启用软件共存配置（见 `sdkconfig.defaults.esp32s3`）
-- 运行时设置 BT 优先策略
-- 设置 BLE / WiFi 发射功率
-- 启用 WiFi 省电模式减少射频冲突
-
----
-
-## 3. 开发环境
-
-- 框架：ESP-IDF（当前工程配置为 v5.5.x）
-- 芯片：支持 ESP32 系列，当前主要配置为 `esp32s3`
-- 系统：Windows / Linux / macOS（按 ESP-IDF 官方流程）
-
----
-
-## 4. 目录结构
+## 目录结构
 
 ```text
 project-name/
 ├─ main/
-│  ├─ main.c                 # 主程序（BLE + WiFi + 共存逻辑）
-│  └─ CMakeLists.txt
-├─ CMakeLists.txt            # 工程入口
-├─ partitions.csv            # 自定义分区表
-├─ sdkconfig.defaults        # 通用默认配置
-├─ sdkconfig.defaults.esp32c2
-├─ sdkconfig.defaults.esp32c3
-├─ sdkconfig.defaults.esp32s3
-├─ .vscode/                  # VS Code + ESP-IDF 插件配置
-└─ .devcontainer/            # 容器化开发配置
+│  ├─ main.c               # 应用启动编排
+│  ├─ app_config.h         # 项目级宏配置
+│  ├─ app_context.h/.c     # 跨模块共享运行时上下文
+│  ├─ wifi_manager.h/.c    # WiFi 初始化、重连、IP 事件
+│  ├─ ble_beacon.h/.c      # BLE 栈初始化、广播、状态任务
+│  ├─ mqtt_service.h/.c    # MQTT 连接、订阅、遥测发布
+│  ├─ sensor_tasks.h/.c    # DHT11 / INMP411 采集任务
+│  ├─ time_sync.h/.c       # SNTP 时间同步
+│  ├─ status_led.h/.c      # WS2812 状态灯控制
+│  ├─ CMakeLists.txt
+│  └─ idf_component.yml
+├─ partitions.csv
+├─ sdkconfig.defaults*
+└─ README.md
 ```
 
----
+## 模块说明
 
-## 5. 快速开始
+### `main.c`
 
-## 5.1 设置目标芯片
+仅保留启动流程：
+
+1. 初始化运行时上下文
+2. 初始化 NVS
+3. 初始化 WiFi
+4. 初始化 BLE 栈
+5. 配置 BLE/WiFi 共存
+6. 启动 BLE 广播
+7. 启动传感器任务与 BLE 状态任务
+
+### `wifi_manager`
+
+- 负责 WiFi Station 初始化
+- 处理断线重连指数退避
+- 在异常失败次数过多时强制重置 WiFi 状态机
+- 在拿到 IP 后触发 SNTP 与 MQTT 启动
+
+### `ble_beacon`
+
+- 初始化 BLE 控制器与 Bluedroid
+- 配置广播包与扫描响应包
+- 在 WiFi 恢复后恢复广播，在 WiFi 中断时暂停广播
+- 周期输出 BLE 状态日志
+
+### `mqtt_service`
+
+- 根据设备 MAC 生成 `device/<MAC>/cmd` 与 `device/<MAC>/telemetry`
+- 处理 MQTT 连接事件
+- 封装遥测 JSON 生成与发布逻辑
+
+### `sensor_tasks`
+
+- DHT11 周期采集温湿度
+- INMP411 通过 I2S 计算噪声值
+- 将温湿度与噪声组合成遥测数据上报
+
+## 构建与烧录
 
 ```bash
 idf.py set-target esp32s3
-```
-
-> 如使用其它芯片，请改为对应 target（如 `esp32c3`、`esp32c2`）。
-
-## 5.2 编译
-
-```bash
 idf.py build
-```
-
-## 5.3 烧录并查看日志
-
-Windows 示例：
-
-```bash
 idf.py -p COM8 flash monitor
 ```
 
-Linux/macOS 示例：
+Linux / macOS 示例：
 
 ```bash
 idf.py -p /dev/ttyUSB0 flash monitor
 ```
 
-退出监视器：`Ctrl-]`
+## 关键配置
 
----
-
-## 6. 关键配置项
-
-当前 WiFi 参数在 `main/main.c` 中通过宏定义：
+当前仍然使用宏硬编码配置，集中在 [main/app_config.h](main/app_config.h)：
 
 - `WIFI_SSID`
 - `WIFI_PASS`
-- `WIFI_MAX_RETRY`
+- `MQTT_BROKER_URI`
+- `MQTT_USERNAME`
+- `MQTT_PASSWORD`
+- DHT11 / INMP411 / WS2812 引脚定义
 
-当前 BLE 参数在 `main/main.c` 中可直接修改：
+后续如果要继续工程化，建议优先迁移到 NVS 或独立配网流程。
 
-- `device_name`
-- `adv_params`（广播间隔、广播类型等）
-- `adv_raw_data`
-- `scan_rsp_raw_data`
+## 遥测格式
 
----
+发布到 `device/<MAC>/telemetry` 的消息格式如下：
 
-## 7. 运行后预期日志
+```json
+{
+  "type": "telemetry",
+  "deviceId": "<MAC>",
+  "ts": 1710000000000,
+  "seq": 1,
+  "data": {
+    "temperature": 25.0,
+    "humidity": 60.0,
+    "noise": 45.3,
+    "rssi": -53
+  }
+}
+```
 
-你应能看到类似信息：
+## 说明
 
-- WiFi 启动并连接成功，打印 IP 地址
-- BLE 广播数据配置成功
-- 扫描响应配置成功
-- `Advertising start successfully`
-
-说明设备已进入稳定广播状态。
-
----
-
-## 8. 面向景区业务的下一步改造建议
-
-建议优先做以下最小改造：
-
-1. 将设备名/广播数据替换为景点唯一标识（如景点 ID、区域 ID）
-2. 将 WiFi 凭据改为可配置（NVS/配网），避免硬编码
-3. 设计统一广播载荷格式（便于 App 端解析）
-4. 增加设备在线状态上报任务（连接后定时上报）
-5. 预留 OTA 升级能力
-
----
-
-## 9. 参考文档
-
-- ESP-IDF 编程指南：
-  https://docs.espressif.com/projects/esp-idf/zh_CN/latest/
-- WiFi API：
-  https://docs.espressif.com/projects/esp-idf/zh_CN/latest/esp32s3/api-reference/network/esp_wifi.html
-- 共存机制：
-  https://docs.espressif.com/projects/esp-idf/zh_CN/latest/esp32s3/api-guides/coexist.html
-
----
-
-## 10. 许可
-
-本项目基于 ESP-IDF 示例演进，遵循 `Unlicense OR CC0-1.0`。
+- 当前项目没有单元测试工程
+- 本地验证主要依赖 `idf.py build` 与串口日志
+- `managed_components/` 中的 `espressif/led_strip` 由 ESP-IDF 自动管理
